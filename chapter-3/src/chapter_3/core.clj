@@ -54,16 +54,6 @@
 
 (def ^:dynamic *scale* 1)
 
-(defn draw-values [f g xs ys]
-  (let [xs*scale (* *scale* xs)
-        ys*scale (* *scale* ys)]
-    (clear g xs*scale ys*scale)
-    (.setSize frame (java.awt.Dimension. xs*scale ys*scale))
-    (doseq [[x y v] (f-values f xs ys)]
-      (.setColor g (java.awt.Color. v v v))
-      (.fillRect g (* *scale* x) (* *scale* y) *scale* *scale*))))
-
-
 (defn clear 
   ([g]
    (clear g 200))
@@ -71,3 +61,13 @@
    (clear g x x))
   ([g x y]
    (.clearRect g 0 0 x y)))
+
+; (defn draw-values [f g xs ys]
+;   (let [xs*scale (* *scale* xs)
+;         ys*scale (* *scale* ys)]
+;     (clear g xs*scale ys*scale)
+;     (.setSize frame (java.awt.Dimension. xs*scale ys*scale))
+;     (doseq [[x y v] (f-values f xs ys)]
+;       (.setColor g (java.awt.Color. v v v))
+;       (.fillRect g (* *scale* x) (* *scale* y) *scale* *scale*))))
+
