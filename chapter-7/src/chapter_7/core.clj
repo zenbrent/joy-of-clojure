@@ -1,8 +1,6 @@
 (ns chapter-7.core
   (:require [clojure.test :as t]))
 
-(t/run-tests)
-
 (comment Functions!)
 
 ;; Data acts as functions LOL
@@ -96,5 +94,147 @@
 ((columns [:plays :loved :band])
  {:band "Burial", :plays 979, :loved 9})
 
+;; If a function of some arguments always results in the
+;; same value and doesn't change anything else,
+;; the reference to the function is transparent in time:
+;; referentially transparent.
+(defn keys-apply [f ks m]
+  (let [only (select-keys m ks)]
+    (zipmap (keys only)
+            (map f (vals only)))))
+
+; (keys-apply #(.toUpperCase %) #{:band} (plays 0))
+
+(defn manip-map
+  "Manipulate a set of keys based on a given function."
+  [f ks m]
+  (merge m (keys-apply f ks m)))
+
+(manip-map #(int (/ % 2)) #{:plays :loved} (plays 0))
+
+;; Referentially transparent functions are easier to optimize.
+
+;; Named arguments!
+(defn slope
+  {:test (fn []
+           (assert (= (slope :p1 [4 15] :p2 [3 21]) -6.0))  
+           (assert (= (slope :p2 [2 1]) 0.5))  
+           (assert (= (slope) 1.0)))}
+  [& {:keys [p1 p2] :or {p1 [0 0] p2 [1 1]}}]
+  (float (/ (- (p2 1) (p1 1))
+            (- (p2 0) (p1 0)))))
+
+;; Pre- and Post-conditions!!!!!!
+;; Use pre & post instead of assert post of the time. 
+;; Assert can be used when pre & post don't work, e.g. loop invariants.
+
+;; To disable pre/post checks, run this near the top of the file:
+; (set! *assert* false)
+(defn slope-v2
+  {:test (fn []
+           (assert (= (slope-v2 [4 15] [3.0 21.0]) -6.0))  
+           (assert (= :err (try (slope-v2 [1 1] [1 1]) (catch AssertionError e :err))))
+           (assert (= :err (try (slope-v2 [1 1] '(1 2)) (catch AssertionError e :err)))))}  
+  [p1 p2]
+  {:pre [(not= p1 p2) (vector? p1) (vector? p2)]
+   :post [(float? %)]}
+  (/ (- (p2 1) (p1 1))
+     (- (p2 0) (p1 0))))
+
+;; Decoupling assertions
+(defn put-things [m]
+  (into m {:meat "beef" :veggie "broccoli"}))
+
+(defn vegan-constraints [f m]
+  {:pre [(:veggie m)]
+   :post [(:veggie %) (nil? (:meat %))]}
+  (f m))
+
+; (vegan-constraints put-things {:veggie "carrot"})
+
+(defn balanced-diet [f m]
+  {:post [(:meat %) (:veggie %)]}
+  (f m))
+
+(balanced-diet put-things {:veggie "carrot"})
+
+;; By pulling assertions into a wrapper, you're decoupling domain-specific requirements
+;; and isolating them into aspects.
+(defn finicky [f m]
+  {:post [(= (:meat %) (:meat m))]} ;; <-- never change meat
+  (f m))
+
+;; Closures
+(def add-and-get
+  (let [ai (java.util.concurrent.atomic.AtomicInteger.)]
+    (fn [y] (.addAndGet ai y))))
+
+; (add-and-get 2)
+
+(defn times-n [x]
+  (fn [y] (* y x)))
+
+; ((times-n 4) 3)
+
+;; Closures as a tidy bundle of values and related functions, kinda like an object.
+
+;; Using cartesian coordinates.
+(def bearings [{:x  0, :y  1} ; north
+               {:x  1, :y  0} ; east
+               {:x  0, :y -1} ; south
+               {:x -1, :y  0}])  ; west
+
+(defn forward [x y bearing-num]
+  [(+ x (:x (bearings bearing-num)))
+   (+ y (:y (bearings bearing-num)))])
+
+; (forward 5 5 0)
+
+(defn bot [x y bearing-num]
+  {:coords [x y]
+   :bearing ([:north :east :south :west] bearing-num)
+   :forward (fn [] (bot (+ x (:x (bearings bearing-num)))
+                        (+ y (:y (bearings bearing-num)))
+                        bearing-num))
+   :turn-left (fn [] (bot x y (mod (+ 1 bearing-num) 4)))
+   :turn-right (fn [] (bot x y (mod (- 1 bearing-num) 4)))})
+
+(:coords (bot 5 5 0))
+(:bearing (bot 5 5 0))
+(:bearing (bot 5 5 1))
+(:bearing ((:turn-right (bot 5 5 1))))
+(:bearing ((:turn-left (bot 5 5 2))))
+(:coords ((:forward (bot 5 5 0))))
+
+;; Polymorphismish
+(defn mirror-bot [x y bearing-num]
+  {:coords [x y]
+   :bearing ([:north :east :south :west] bearing-num)
+   :forward (fn [] (mirror-bot (- x (:x (bearings bearing-num)))
+                               (- y (:y (bearings bearing-num)))
+                               bearing-num))
+   :turn-right (fn [] (mirror-bot x y (mod (- 1 bearing-num) 4)))
+   :turn-left (fn [] (mirror-bot x y (mod (+ 1 bearing-num) 4)))})
+
+(:coords ((:forward (mirror-bot 5 5 0))))
+
+;; Closures are compiled AOT and are very performant. :)
+
+;; 2 major techniques for mundane (named explicitly, not through
+;; mutual recursion or implicitly with recur) to tail recursion:
+;; 1. Use a helper function to do most of the work.
+;; 2. Use an accumulator, eliminating stack explosion.
+;; For functions that generate sequences, lazy-seq is often better than
+;; tail recursion b/c the mundane dfn is more natural & understandable.
+(defn pow [base exp]
+  (letfn [(kapow [base exp acc]
+            (if (zero? exp)
+              acc
+              (recur base (dec exp) (* base acc))))]
+    (kapow base exp 1)))
+
+; (pow 2N 99999)
 
 
+
+(t/run-tests)
