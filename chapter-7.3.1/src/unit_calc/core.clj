@@ -6,8 +6,8 @@
                     :mm [1/10 :cm]})
 
 (def simple-data {:bit 1
-                   :byte 8
-                   :nibble [1/2 :byte]})
+                  :byte 8
+                  :nibble [1/2 :byte]})
 
 (defn convert
   [context descriptor]
@@ -19,3 +19,5 @@
                    (* mag val)))))
           0
           (partition 2 descriptor)))
+
+

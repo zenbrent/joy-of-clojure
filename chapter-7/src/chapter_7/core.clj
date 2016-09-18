@@ -236,5 +236,42 @@
 ; (pow 2N 99999)
 
 
+;; 7.3.4 CPS
+;; It's a way of generalizing computation by viewing it in terms of up to 3 functions:
+;;   Accept - Decides when a computation should terminate
+;;   Return - Wraps the return values
+;;   Continuation - Provides the next step in the computation
+;; So the same rules as recursion, but may not be to itself.
+
+;; Not widely used in clojure: unless the app can guarantee a bounded execution path, it will blow the stack.
+;; It can make errors hard to track down.
+;; In lazy langs like haskell, strict order isn't as important. But it's still not good with parallelization.
+
+(defn fac-cps [n k]
+  (letfn [(cont [v] (k (* v n)))]
+    (if (zero? n)
+      (k 1)
+      (recur (dec n) cont))))
+
+(defn fac [n]
+  (fac-cps n identity))
+
+(defn mk-cps
+  "A CPS function generator."
+  [accept? kend kont]
+  (fn [n]
+    ((fn [n k]
+       (let [cont (fn [v]
+                    (k ((partial kont v) n)))]
+         (if (accept? n)
+           (k 1)
+           (recur (dec n) cont))))
+     n kend)))
+
+(def fac2
+  (mk-cps zero?
+          identity
+          #(* %1 %2)))
+
 
 (t/run-tests)
