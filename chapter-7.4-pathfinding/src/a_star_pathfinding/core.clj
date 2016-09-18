@@ -1,6 +1,7 @@
 (ns a-star-pathfinding.core)
 
 ;; A* Pathfinding!
+;; TODO: Read Dijkstra 1959 and play with more heuristics and worlds.
 
 ;; Finds the least-difficult path to a goal.
 ;; The difficulty (cost) is found using a function (total-cost) that 
@@ -13,6 +14,12 @@
             [  1   1   1   1   1]
             [  1 999 999 999 999]
             [  1   1   1   1   1]])
+
+(def world2 [[  1   1   1   2  1]
+             [  1   1   1 999  1]
+             [  1   1   1 999  1]
+             [  1   1   1 999  1]
+             [  1   1   1   1  1]])
 
 ;; from 5.1
 (def neighbors4
@@ -62,5 +69,43 @@
                 min))
             coll)))
 
+(defn astar [start-yx step-est cell-costs]
+  (let [size (count cell-costs)]
+    (loop [steps 0
+           routes (vec (repeat size (vec (repeat size nil))))
+           work-todo (sorted-set [0 start-yx])]
+      (if (empty? work-todo)
+        [(peek (peek routes)) :steps steps]
+        (let [[_ yx :as work-item] (first work-todo)
+              rest-work-todo (disj work-todo work-item)
+              nbr-yxs (neighbors size yx)
+              cheapest-nbr (min-by :cost
+                                   (keep #(get-in routes %)
+                                         nbr-yxs))
+              newcost (path-cost (get-in cell-costs yx)
+                                 cheapest-nbr)
+              oldcost (:cost (get-in routes yx))]
+          (if (and oldcost (>= newcost oldcost))
+            (recur (inc steps) routes rest-work-todo)
+            (recur (inc steps)
+                   (assoc-in routes yx
+                             {:cost newcost
+                              :yxs (conj (:yxs cheapest-nbr [])
+                                         yx)})
+                   (into rest-work-todo
+                         (map
+                           (fn [w]
+                             (let [[y x] w]
+                               [(total-cost newcost step-est size y x) w]))
+                           nbr-yxs))))))))) 
 
+
+; (pprint (astar [0 0] 17 world))
+; (pprint (astar [0 0] 900 world2))
+; (pprint (astar [0 0] 900 (assoc-in world2 [4 3] 666)))
+; (apply diff
+;        (map #(-> % first  :yxs println)
+;             [(astar [0 0] 900 world2)
+;              (astar [0 0] 900 (assoc-in world2 [4 3] 666))]))
+; (map println (assoc-in world2 [4 3] 666))
 

@@ -28,3 +28,36 @@
     (is (= {:cost 1} (min-by :cost [{:cost 100} {:cost 110} {:cost 1} {:cost 99} {:cost 1000}])))
     (is (= {:cost -10} (min-by :cost [{:cost 10} {:cost -10}])))))
 
+(deftest astar-test
+  (testing "find the best path"
+    (is (=
+         (astar [0 0] 17 world)
+         [{:cost 17,
+           :yxs [[0 0]
+                 [0 1]
+                 [0 2]
+                 [0 3]
+                 [0 4]
+                 [1 4]
+                 [2 4]
+                 [2 3]
+                 [2 2]
+                 [2 1]
+                 [2 0]
+                 [3 0]
+                 [4 0]
+                 [4 1]
+                 [4 2]
+                 [4 3]
+                 [4 4]]}
+          :steps 81]))
+    (is (=
+         (astar [0 0] 900 world2)
+         [{:cost 9
+           :yxs [[0 0] [0 1] [0 2] [1 2] [2 2] [3 2] [4 2] [4 3] [4 4]]}
+          :steps 134]))
+    (is (=
+         (astar [0 0] 900 (assoc-in world2 [4 3] 666))
+         [{:cost 10
+           :yxs [[0 0] [0 1] [0 2] [0 3] [0 4] [1 4] [2 4] [3 4] [4 4]]}
+          :steps 132]))))
