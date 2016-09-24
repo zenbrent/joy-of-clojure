@@ -235,7 +235,7 @@
   (for [form (partition 3 forms)]
     (build-contract form)))
 
-(defn build-contract [c]
+(defn- build-contract [c]
   (let [args (first c)]
     (list
       (into '[f] args)
