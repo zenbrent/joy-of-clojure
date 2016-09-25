@@ -4,7 +4,13 @@ A Clojure library designed to ... well, that part is up to you.
 
 ## Usage
 
-FIXME
+  $ lein midje :autotest
+
+or, for a repl:
+
+  $ lein repl
+  (use 'midje.repl)
+  (autotest)
 
 ## License
 
