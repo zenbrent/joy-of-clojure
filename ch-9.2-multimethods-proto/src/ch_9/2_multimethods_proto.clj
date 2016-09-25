@@ -38,3 +38,59 @@
     (get post-traumatic-morris :likes-9lives) => true))
 
 
+;; To create behaviors that work against different "types" of a prototype map:
+(defmulti compiler :os)
+(defmethod compiler ::unix [m] (get m :c-compiler))
+(defmethod compiler ::osx [m] (get m :llvm-compiler))
+
+(defmulti home :os)
+(defmethod home ::unix [m] (get m :home))
+(defmethod home ::bsd [m] "/home")
+(prefer-method home ::unix ::bsd)
+(remove-method home ::bsd) ;; <= lol who uses bsd
+
+;; Arbitrary dispatch!
+(defmulti compile-cmd (juxt :os compiler))
+(defmethod compile-cmd [::osx "gcc"] [m]
+ (str "/usr/bin/" (get m :c-compiler)))
+(defmethod compile-cmd :default [m]
+ (str "Unsure where to locate " (get m :c-compiler)))
+
+; (defmethod compile-cmd [::unix "clang"] )
+
+;; http://stackoverflow.com/questions/3012088/when-and-how-should-independent-hierarchies-be-used-in-clojure
+;; independent hierarchies should be used when more than one hierarchy is needed, or when the hierarchy needs
+;; to be modified extensively during run time. Also, if we want a hierarchy for naked keywords, an independent
+;; hierarchy is required.
+
+(fact
+  "demoing multimethods"
+  (let [clone (partial beget {})
+        unix {:os ::unix, :c-compiler "cc", :home "/home", :dev "/dev"}
+        osx (-> (clone unix)
+                (put :os ::osx)
+                (put :llvm-compiler "clang")
+                (put :home "/Users"))]
+    (derive ::osx ::unix) ;; this manipulates a GLOBAL structure.
+    (derive ::osx ::bsd)
+
+    (compiler unix) => "cc"
+    (compiler osx) => "clang"
+
+    (home unix) => "/home"
+    (home osx) => "/Users" ;; this errors if home doesn't have a prefer-method list
+
+    (mapv parents [::osx ::unix]) => [#{::unix ::bsd} nil]
+    (mapv ancestors [::osx ::unix]) => [#{::unix ::bsd} nil] 
+    (mapv descendants [::osx ::unix]) => [nil #{::osx}]
+    (isa? ::osx ::unix) => true
+    (isa? ::unix ::osx) => false
+    (compile-cmd osx) => "Unsure where to locate cc"))
+
+;; Juxt is AWESOME:
+(def each-math (juxt + * - /))
+(map each-math (range 5) (range 5 10))
+
+((juxt take drop) 3 (range 9))
+;; Awesome!!!
+
