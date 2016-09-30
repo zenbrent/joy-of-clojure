@@ -1,7 +1,9 @@
 (ns ch-9-data-and-code.core
   ;; fine grained var mapping:
   ;; :exclude, :only, :as, :refer-clojure, :import, :use, :load, and :require. 
-  (:use midje.sweet))
+  (:use 
+    [ch-9-data-and-code.final-tree-node :only []]
+    [midje.sweet]))
 ;; When using `-` in namespaces, the source filename must use `_` instead of `-`.
 
 ;; 2 level mapping:
@@ -106,6 +108,128 @@
   ;; is still a TreeNode though.
   )
 
-;; They're also awesome with protocols!
+;; They're also awesome with protocols! More on that later.
+
+(defprotocol FIXO
+  (fixo-push [fixo value])
+  (fixo-pop [fixo])
+  (fixo-peek [fixo]))
+
+;; To define the methods polymorphically (if that's important) use named recursion:
+;; Also, implementing it inline makes dramatically faster code.
+;; The record's protocol cannot be redefined later, though.
+;; Inline definition is the only way to use implement java interfaces and extend java.lang.Object
+;; Interfaces can use primitives, not just boxed values, so inline implementations can also
+;;;; support primitives. GTK for interop and can provide performance parity with Java code.
+;; Also! When using recur on an inline method, recur doesn't pass the first arg.
+(defrecord TreeNode [val l r]
+  FIXO
+  (fixo-push [t v]
+    (if (< v val)
+      (->TreeNode val (fixo-push l v) r) ;; the record's values are available as locals.
+      (->TreeNode val l (fixo-push r v))))
+  (fixo-peek [t]
+    (if l
+      (fixo-peek l)
+      val))
+  (fixo-pop [t]
+    (if l
+      (->TreeNode val (fixo-pop l) r)
+      r)))
+
+(extend-type clojure.lang.IPersistentVector
+	FIXO
+	(fixo-push [vector value]
+		(conj vector value))
+	(fixo-peek [vector]
+		(peek vector))
+	(fixo-pop [vector]
+		(pop vector)))
+
+; (println (xseq (fixo-push sample-tree 5/2)))
+
+(fixo-push [2 3 4 5 6] 5/2)
+
+(extend-type nil
+  FIXO
+  (fixo-push [t v]
+    (->TreeNode v nil nil)))
+
+(xseq (reduce fixo-push nil [3 5 2 4 6 0]))
+
+(def sample-tree2 (reduce fixo-push (->TreeNode 3 nil nil) [5 2 4 6]))
+
+; (extend-type TreeNode
+;   FIXO
+;   (fixo-push [node value]
+;     (xconj node value))
+;   (fixo-peek [node]
+;     (if (:l node)
+;       (recur (:l node))
+;       (:val node)))
+; 	(fixo-pop [node]
+; 		(if (:l node)
+; 		 (->TreeNode (:val node) (fixo-pop (:l node)) (:r node))
+; 		 (:r node))))
+
+;; A protocol can be partially implemented, but a type can only have 1 implementation, i.e.
+;; (extend-typing TreeNode FIXO (fixo-pop ...)) will remove the fixo-push implementation.
+
+;; How to extend a class then build another class on top of that?
+
+;; 1. Make a function that builds on the protocol's methods:
+(defn fixo-into  [c1 c2]
+	(reduce fixo-push c1 c2))
+
+(xseq (fixo-into (->TreeNode 5 nil nil) [2 4 6 7]))
+
+;; 2. extend-type
+
+; (def tree-node-fixo
+; 	{:fixo-push (fn [node value]
+; 									(xconj node value))
+; 	 :fixo-peek (fn [node]
+; 									(if (:l node)
+; 										(recur (:l node))
+; 										(:val node)))
+; 	 :fixo-pop (fn [node]
+; 								 (if (:l node)
+; 									 (->TreeNode (:val node) (fixo-pop (:l node)) (:r node))
+; 									 (:r node)))})
+
+; (extend TreeNode FIXO tree-node-fixo)
+
+; (xseq (fixo-into (->TreeNode 5 nil nil) [2 4 6 7]))
+
+(defn fixed-fixo
+  ([limit] (fixed-fixo limit []))
+  ([limit vector]
+   (reify FIXO ;; Note: methods always use the protocol's namespace. Collisions avoided.
+     (fixo-push [this value]
+       (if (< (count vector) limit)
+         (fixed-fixo limit (conj vector value))
+         this))
+     (fixo-peek [_]
+       (peek vector))
+     (fixo-pop [_]
+       (pop vector))))) 
+
+;; Since methods share their protocol's namespace, you can't have multiple protocols have
+;; a method with the same name. Since the protocols are controlled by the same person, they
+;; can move to another namespace or rename a method.
+
+(deftype InfiniteConstant [i]
+  clojure.lang.ISeq
+  (seq [this]
+    (lazy-seq (cons i (seq this)))))
+
+(take 3 (->InfiniteConstant 5))
+
+;; assoc, disassoc, keyword lookups, etc. don't work on types, unless you implement them.
+
+(:i (->InfiniteConstant 5))
+
+;; but the Java fields are still available:
+(.i (->InfiniteConstant 5))
 
 
