@@ -1,7 +1,6 @@
 (ns ch-9-chess-builder.core
   (:refer-clojure :exclude [get])
-  (:use [midje.sweet]
-        [clojure.pprint :refer [pprint]]))
+  (:use [midje.sweet]))
 
 (def example-move {:from :e7
                    :to :e8
