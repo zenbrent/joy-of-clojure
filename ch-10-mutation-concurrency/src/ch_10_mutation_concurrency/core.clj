@@ -102,26 +102,33 @@
 
 (defn place [from to] to)
 
+;; Commute allows for more concurrency than alter or ref-set
+;; but transaction is ran at least twice
+;; and must be commutative, or at least last-one-in-wins.
 (defn move-piece [[piece dest] [[_ src] _]]
-  (alter (get-in board dest) place piece) ;; get-in is awesome
-  (alter (get-in board src) place :-)
-  (alter num-moves inc))
+  (commute (get-in board dest) place piece) ;; get-in is awesome
+  (commute (get-in board src) place :-)
+  (commute num-moves inc))
 
 (defn update-to-move [move]
   (alter to-move #(vector (second %) move)))
 
 (defn make-move []
-  (let [move (choose-move @to-move)]
-    (dosync (move-piece move @to-move))
-    (dosync (update-to-move move))))
+  (dosync
+    (let [move (choose-move @to-move)]
+      (move-piece move @to-move)
+      (update-to-move move))))
 
 ; (reset-board!)
 ; (doseq [_ (range 10000)] (make-move))
 ; (board-print board)
 
-; (reset-board!)
-; (dothreads! make-move :threads 100 :times 100)
-; (board-print board)
+(reset-board!)
+(dothreads! make-move :threads 100 :times 1000)
+(board-print board)
+
+;; Don't do this usually:
+(dosync (ref-set to-move '[[:K [3 1]] [:k [1 1]]]))
 
 ;; Embedded transaction: clojure absorbs nested transactions into the parent,
 ;; so if one fails, they're all retried.
@@ -141,6 +148,48 @@
 ;; e.g. (io! (.println System/out "sups yo!"))
 ;; (dosync (io! (.println System/out "sups yo!"))) ;; throws error
 ;; Mutate things -- b/c it's usu. not idempotent.
+;; Large transactions -- do as little work as possible in them.
+
+
+;; Snapshot isolation: in a transaction, all ref values used will be from the same moment in time.
+;; Algorithms should be designed so they only care that values haven't changed before a commit.
+;; (unless it's commutative)
+;; Use (ensure ref) when referencing a value that isn't written to, which gurantees that a read-only
+;; ref isn't written to in a transaction.
+
+;; 10.2.4 Refs under stress
+
+;; Avoid having both short and long running transactions interacting with a single ref.
+
+(defn stress-ref [r]
+  (let [slow-tries (atom 0)]
+    (future
+      (dosync
+        (swap! slow-tries inc)
+        (Thread/sleep 200)
+        @r)
+      (println (format "r is: %s, history: %d, after: %d tries"
+                       @r (.getHistoryCount r) @slow-tries)))
+    (dotimes [i 500]
+      (Thread/sleep 10)
+      (dosync (alter r inc)))
+    :done))
+
+; (stress-ref (ref 0))
+;; r is: 500, history: 10, after: 31 tries
+;; r is: 500, history: 10, after: 30 tries
+
+;; If you REALLY have to mix long and short transactions:
+(stress-ref (ref 0 :max-history 30))
+; r is: 300, history: 17, after: 18 tries
+(stress-ref (ref 0 :max-history 50))
+; 298, history: 17, after: 18 tries
+(stress-ref (ref 0 :max-history 100))
+; r is: 279, history: 16, after: 17 tries
+
+;; Since it looks like it needs about 20 items in the history:
+(stress-ref (ref 0 :min-history 15 :max-history 30))
+; r is: 33, history: 16, after: 2 tries
 
 
 
