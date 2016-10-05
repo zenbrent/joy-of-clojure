@@ -292,5 +292,24 @@
 
 ;; fail mode supports handlers, but they can't restart the agent, so not usu. useful.
 
+;; Don't use agents as a thread pool. Use a thread pool.
 
+
+;; 10.4 Atoms
+;; Synchronous like refs
+;; Uncoordinated like agents
+;; Useful for CAS spinning operations (keep checking for a value in a loop)
+;; i.e. atomically compute a value given an existing value and swap in the new one.
+;; Updates are local to calling thread.
+;; DOES NOT OCCUR IN STM -- not coordinated with other reference types -- not rolled back
+;;                          if a transaction fails. Only use in a transaction if idempotent!
+
+;; Update the mutable reference with:
+;; swap!
+;; compare-and-set!
+;; reset!
+
+(def ^:dynamic *time* (atom 0))
+(defn tick [] (swap! *time* inc))
+(dothreads! tick :threads 100 :times 100)
 
