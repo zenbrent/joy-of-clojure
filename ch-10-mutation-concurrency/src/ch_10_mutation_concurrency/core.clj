@@ -180,16 +180,86 @@
 ;; r is: 500, history: 10, after: 30 tries
 
 ;; If you REALLY have to mix long and short transactions:
-(stress-ref (ref 0 :max-history 30))
+; (stress-ref (ref 0 :max-history 30))
 ; r is: 300, history: 17, after: 18 tries
-(stress-ref (ref 0 :max-history 50))
+; (stress-ref (ref 0 :max-history 50))
 ; 298, history: 17, after: 18 tries
-(stress-ref (ref 0 :max-history 100))
+; (stress-ref (ref 0 :max-history 100))
 ; r is: 279, history: 16, after: 17 tries
 
 ;; Since it looks like it needs about 20 items in the history:
-(stress-ref (ref 0 :min-history 15 :max-history 30))
+; (stress-ref (ref 0 :min-history 15 :max-history 30))
 ; r is: 33, history: 16, after: 2 tries
 
+;; Agents!
 
+;; Each agent has a queue of actions to be performed on it's value.
+;; Each action produces a new value for the agent to pass to subsequent values.
+;; queue actions w/ send or send-off
+;; send & send-off are not considered side-effects in context of dosync
+
+(def joy (agent []))
+
+; (send joy conj "First edition")
+
+(defn slow-conj [coll item]
+  (Thread/sleep 1000)
+  (conj coll item))
+
+(send joy slow-conj "First edition")
+@joy
+
+;; await lets you block a thread until an agent has processed a message,
+;; but it won't work in agent threads or transactions to prevent deadlocks.
+
+
+;; Controlling IO
+
+(def log-agent (agent 0))
+
+;; All actions take the curr state as their 1st arg, then other args passed in.
+(defn do-log [msg-id message]
+  (println msg-id ":" message)
+  (inc msg-id))
+
+(defn do-step [channel message]
+  (Thread/sleep 1)
+  (send-off log-agent do-log (str channel message)))
+
+(defn three-step [channel]
+  (do-step channel " ready to begin (step 0)")
+  (do-step channel " warming up (step 1)")
+  (do-step channel " really getting going now (step 2)")
+  (do-step channel " done! (step 3)"))
+
+(defn all-together-now []
+  (dothreads! #(three-step "alpha"))
+  (dothreads! #(three-step "beta"))
+  (dothreads! #(three-step "omega")))
+
+; (do-step "important: " "this must go out!")
+; (await log-agent)
+
+; (send log-agent (fn [_] 1000)) ;; set a value
+; (do-step "epsilon " "near miss!")
+
+;; send-off -- a single action queue is used
+;; send -- a single action queue + agent waits in a thread pool's queue.
+;;         The thread pool size is based on the # of threads the JVM has, so
+;;         don't use it with anything that takes a long time or it'll block
+;;         everything else.
+
+(defn exercise-agents [send-fn thread-count]
+  (let [agents (map #(agent %) (range thread-count))]
+    (doseq [a agents]
+      (send-fn a (fn [_] (Thread/sleep 1000))))
+    (doseq [a agents]
+      (await a))))
+
+; (time (exercise-agents send-off 10))
+; (time (exercise-agents send 10))
+; (time (exercise-agents send-off 11))
+; (time (exercise-agents send 11))
+; (time (exercise-agents send-off 20))
+; (time (exercise-agents send 20))
 
