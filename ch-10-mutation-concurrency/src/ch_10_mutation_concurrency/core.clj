@@ -263,3 +263,34 @@
 ; (time (exercise-agents send-off 20))
 ; (time (exercise-agents send 20))
 
+
+;; :error mode -- default
+; (agent-error log-agent) ;=> nil
+; (send log-agent (fn [] 1234)) ;; agent errors and is stopped, sending another action will make throw.
+; (println @log-agent) ;=> 0
+; (send log-agent (fn [_] 1234)) ;=> throws error
+; (agent-error log-agent) ;=> prints error
+
+; (restart-agent log-agent 2500 :clear-actions true) ;; :clear-actions removes pending items from the queue
+; (restart-agent log-agent 2500)                     ;; otherwise they'll all run
+
+; (println @log-agent) ;=> 2500
+; (restart-agent log-agent 2500) ;=> error
+
+;; :continue mode
+(defn handle-log-error [the-agent the-err]
+  (println "An action sent to the log-agent threw " the-err))
+
+(set-error-handler! log-agent handle-log-error)
+(set-error-mode! log-agent :continue)
+
+; (send log-agent (fn [] 1234)) ;=> logs error
+; (send log-agent (fn [_] 1000))
+; (println @log-agent) ;=> 1000
+; (agent-error log-agent) ;=> nil
+; (send-off log-agent do-log "Stayin' alive, stayin' alive...")
+
+;; fail mode supports handlers, but they can't restart the agent, so not usu. useful.
+
+
+
