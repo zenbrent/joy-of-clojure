@@ -309,7 +309,81 @@
 ;; compare-and-set!
 ;; reset!
 
-(def ^:dynamic *time* (atom 0))
-(defn tick [] (swap! *time* inc))
-(dothreads! tick :threads 100 :times 100)
+; (def ^:dynamic *time* (atom 0))
+; (defn tick [] (swap! *time* inc))
+; (dothreads! tick :threads 100 :times 100)
+
+;; 10.6 Vars
+;; thread local
+;; can be named and interned in a ns -- most refs are assigned to something with a name and you deref them,
+;;                                      referencing a var by name gives you it's value. Use var to get the
+;;                                      reference obj.
+
+; *read-eval* => true ;; root binding for *read-eval*
+; (var *read-eval*) => #'*read-eval*
+
+(defn print-read-eval []
+  (println "*read-eval* is currently " *read-eval*))
+
+(defn binding-play []
+  (print-read-eval)
+  (binding [*read-eval* false]
+    (print-read-eval))
+  (print-read-eval))
+
+;; Creating vars:
+; defn -- puts a fn in a var
+; defmacro
+; defonce -- sets the value of an unbound var, or doesn't evalue argument.
+; defmulti -- multimethod in a var
+
+;; vars can exist (or not) in one of 4 states:
+; (def x) ;; unbound
+; (def x 5) ;; bound, not thread-bound
+; (binding [x 7] ...) ;; thread-bound
+; (with-local-vars [x 9] ...) ;; thread-bound, but (resolve #'x)s to nil
+
+;; To test each, use:
+; (resolve 'x)
+; (bound? #'x)
+; (thread-bound? #'x)
+
+;; with-local-vars creates a local var
+;; since it's bound to a local, it's not implicitly looked up by symbolic name. use deref or var-get.
+;; This is very rarely used.
+
+(def x 42.5)
+{:outer-var-value x
+ :with-locals (with-local-vars [x 9]
+                {:local-var x
+                 :local-var-value (var-get x)})}
+
+;; vars have dynamic scope:
+(with-precision 4 ;; uses `binding` macro
+  (/ 1M 3))
+
+;; throws an error, because BigDecimal won't round unless you tell it that's ok:
+; (/ 1M 3) 
+
+;; This errors too:
+; (with-precision 4
+;   (map (fn [x] (/ x 3)) (range 1M 4M)))
+;; binding uses dynamic scope, not lexical
+;; also issue with agents, futures, etc.
+
+;; This works, but it's not lazy anymore:
+(with-precision 4
+  (doall (map (fn [x] (/ x 3)) (range 1M 4M))))
+
+;; recreates the dynamic scope for each call:
+(with-precision 4
+  (map (bound-fn [x] (/ x 3)) (range 1M 4M)))
+
+;; try/catch --
+;; e.g. with-open uses try/finally to clean up automatically after execution leaves it's dynamic scope.
+;; bound-fn doesn't help, you have to write to the file before leaving it's dynamic scope.
+
+;; summary!
+;; Clojure doesn't foster concurrency, but provides tools for sane management of state.
+;; That makes sane-r concurrency.
 
