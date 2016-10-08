@@ -1,7 +1,101 @@
-(ns ch-11-parallelism.core)
+(ns ch-11-parallelism.core
+  (:require (clojure [xml :as xml]))
+  (:require (clojure [zip :as zip]))
+  (:import (java.util.regex Pattern)))
 
 ;; Concurrency is about the design of a system
 ;; Parallelism is about the execution model.
+
+;; Futures represent work that is to be done.
+;; partition typically sequential operations into discrete parts that can be
+;; asynchronously processed across several threads.
+
+; (time (let [x (future (do (Thread/sleep 50) (+ 41 2)))]
+;         [@x @x]))
+
+; (let [x (future (do (Thread/sleep 50) (+ 41 2)))]
+;         (time [x])
+;         (time [@x]) ;; it's only evaluated when you dereference it.
+;         (time [@x @x]))
+
+(defn feed->zipper [uri-str]
+  (->> (xml/parse uri-str)
+       zip/xml-zip))
+
+(defn normalize [feed]
+  (if (= :feed (:tag (first feed)))
+    feed
+    (zip/down feed)))
+
+(defn feed-children [uri-str]
+  (->> uri-str
+       feed->zipper
+       normalize
+       zip/children
+       (filter (comp #{:item :entry} :tag)))) ;; grab entries
+
+(defn title [entry]
+  (some->> entry
+           :content ;; get the feed content
+           (some #(when (= :title (:tag %)) %)) ;; get the title
+           :content
+           first)) ;; assume there's only 1
+
+(defn count-text-task [extractor txt feed]
+  (let [items (feed-children feed)
+        re (Pattern/compile (str "(?i)" txt))]
+    (->> items
+         (map extractor) ;; get children text
+         (mapcat #(re-seq re %)) ;; map against each
+         count)))
+
+; (count-text-task
+;   title
+;   "Erlang"
+;   "http://feeds.feedburner.com/ElixirLang")
+
+; (count-text-task
+;   title
+;   "Elixir"
+;   "http://feeds.feedburner.com/ElixirLang")
+
+(def feeds #{"http://feeds.feedburner.com/ElixirLang"
+             "http://blog.fogus.me/feed/"})
+
+; (let [results (for [feed feeds]
+;                 (future
+;                   (count-text-task title "Elixir" feed)))]
+;   (pprint results)
+;   (reduce + (map deref results)))
+
+;; use that patter to build a seq of futures
+;; or
+
+(defmacro as-futures [[a args] & body]
+  (let [parts (partition-by #{'=>} body) ;; parallel actions are seperated from the summation by =>
+        [acts _ [res]] (partition-by #{:as} (first parts)) ;; name the results
+        [_ _ task] parts]
+    `(let [~res (for [~a ~args] (future ~@acts))]
+       ~@task)))
+
+(defn occurences [extractor tag & feeds]
+  (as-futures [feed feeds]
+    (count-text-task extractor tag feed)
+    :as results
+   =>
+    (reduce + (map deref results))))
+
+; (println
+;   (occurences title "Released"
+;               "http://blog.fogus.me/feed/"
+;               "http://feeds.feedburner.com/ElixirLang"
+;               "http://www.ruby-lang.org/en/feeds/news.rss"))
+
+;; If a computation freezes, then the deref call will, to. Use:
+;; future-done?
+;; future-cancel
+;; future-cancelled?
+;; to "skip, retry, or eliminate ornery feeds"
 
 
 
