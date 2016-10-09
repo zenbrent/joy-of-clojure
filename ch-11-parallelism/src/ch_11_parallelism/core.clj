@@ -1,4 +1,5 @@
 (ns ch-11-parallelism.core
+  (:use [ch-11-parallelism.dothreads :refer [dothreads!]])
   (:require (clojure [xml :as xml]))
   (:require (clojure [zip :as zip]))
   (:import (java.util.regex Pattern)))
@@ -96,6 +97,41 @@
 ;; future-cancel
 ;; future-cancelled?
 ;; to "skip, retry, or eliminate ornery feeds"
+
+;; 11.2 Promises </3
+
+;; "Futures encapsulate an arbitrary expression that caches its value in the future on completion
+;;  Promises are placeholders for values whos construction is fulfilled on another thread via `deliver`."
+
+(def x (promise))
+(def y (promise))
+(def z (promise))
+
+; (dothreads! #(deliver z (+ @x @y)))
+
+; (dothreads!
+;   #(do (Thread/sleep 10) (deliver x 52)))
+
+; (dothreads!
+;   #(do (Thread/sleep 20) (deliver y 86)))
+
+; (time @z)
+
+;; Promises must write once and only once!
+
+(defmacro with-promises [[n tasks _ as] & body]
+  (when as
+    `(let [tasks# ~tasks
+           n# (count tasks#)
+           promises# (take n# (repeatedly promise))]
+       (dotimes [i# n#]
+         (dothreads!
+           (fn []
+             (deliver (nth promises# i#)
+                      ((nth tasks# i#))))))
+       (let [~n tasks#
+             ~as promises#]
+         ~@body))))
 
 
 
