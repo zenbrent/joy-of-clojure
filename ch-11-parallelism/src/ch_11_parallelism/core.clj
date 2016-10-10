@@ -133,5 +133,36 @@
              ~as promises#]
          ~@body))))
 
+(defn feed-items [k feed]
+  (k
+   (for [item (filter (comp #{:entry :item} :tag)
+                      (feed-children feed))]
+     (-> item :content first :content))))
 
+(feed-items
+  count
+  "http://blog.fogus.me/feed/")
+
+(defn cps->fn [f k]
+  (fn [& args]
+    (let [p (promise)]
+      (apply f (fn [x] (deliver p (k x))) args)
+      @p)))
+
+(def count-items (cps->fn feed-items count))
+
+(count-items "http://blog.fogus.me/feed/")
+
+;; Only a single thread can deliver on a promise, so only that thread can cause a deadlock.
+
+(def kant (promise))
+(def hume (promise))
+
+(dothreads!
+  #(do (println "Kant has" @kant) (deliver hume :thinking)))
+
+(dothreads!
+  #(do (println "Hume has" @kant) (deliver kant :fork)))
+
+;; @kant or @hume will cause a deadlock.
 
