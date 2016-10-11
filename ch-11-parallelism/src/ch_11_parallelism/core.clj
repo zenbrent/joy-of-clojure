@@ -1,7 +1,8 @@
 (ns ch-11-parallelism.core
   (:use [ch-11-parallelism.dothreads :refer [dothreads!]])
-  (:require (clojure [xml :as xml]))
-  (:require (clojure [zip :as zip]))
+  (:require [clojure [zip :as zip]]
+            [clojure [xml :as xml]]
+            [clojure.core.reducers :as r])
   (:import (java.util.regex Pattern)))
 
 ;; Concurrency is about the design of a system
@@ -139,9 +140,9 @@
                       (feed-children feed))]
      (-> item :content first :content))))
 
-(feed-items
-  count
-  "http://blog.fogus.me/feed/")
+; (feed-items
+;   count
+;   "http://blog.fogus.me/feed/")
 
 (defn cps->fn [f k]
   (fn [& args]
@@ -151,7 +152,7 @@
 
 (def count-items (cps->fn feed-items count))
 
-(count-items "http://blog.fogus.me/feed/")
+; (count-items "http://blog.fogus.me/feed/")
 
 ;; Only a single thread can deliver on a promise, so only that thread can cause a deadlock.
 
@@ -165,4 +166,43 @@
   #(do (println "Hume has" @kant) (deliver kant :fork)))
 
 ;; @kant or @hume will cause a deadlock.
+
+;; pvalues macro is like as-futures, except it returns a lazy sequence of the results
+;; of all the enclosed expressions:
+
+(pvalues 1 2 (+ 1 2))
+
+(defn sleeper [s thing] (Thread/sleep (* 1000 s)) thing)
+(defn pvs [] (pvalues
+               (sleeper 2 :1st)
+               (sleeper 3 :2nd)
+               (keyword "3rd")))
+
+; (-> (pvs) first time) ;=> ~2sec
+; (-> (pvs) last time) ;=> ~3sec
+
+;; All seq values within a sliding window are forced. The window size is an implementation detail of the lang.
+
+; (->> [1 2 3]
+;      (pmap (comp inc (partial sleeper 2)))
+;      doall
+;      time) ;=> ~2sec
+
+;; If the cost of coordinating < cost of function application, then pmap might help. Test first!
+
+;; pcalls takes a list of 0 arity fns and returns a lazy seq of results.
+
+; (-> (pcalls
+;       #(sleeper 2 :1st)
+;       #(sleeper 3 :2nd)
+;       #(keyword "3rd"))
+;     doall
+;     time) ;=> ~3sec
+
+(def big-vec (vec (range (* 1000 1000))))
+
+; (time (reduce + big-vec)) ;=> "Elapsed time: 81.159708 msecs"
+; (time (r/fold + big-vec)) ;=> "Elapsed time: 30.983424 msecs"
+
+;; more on reducers in ch 15.
 
