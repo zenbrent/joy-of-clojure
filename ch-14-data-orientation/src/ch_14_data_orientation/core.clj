@@ -128,3 +128,8 @@
 (edn/read-string {:readers T, :default vector} "#wt/f :???")
 
 
+;; The data-programmable engine
+;; Functions can be viewed as computation engines that can be configured with data.
+
+;; Clojure compiler takes clj data and returns clj data.
+
